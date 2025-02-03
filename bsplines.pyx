@@ -23,18 +23,22 @@ cdef extern from "interpol.h":
   void C_SplineWeights1D "SplineWeights1D" (double*, double*, long)
   void C_SplineWeights2D "SplineWeights2D" (double*, double*, double*, double*, long)
 
-def SamplesToCoefficients1D (nm.ndarray[nm.double_t,ndim=1] Data, long Datasize,
+def SamplesToCoefficients1D (nm.ndarray[nm.double_t,ndim=1] Data,
                              long SplineDegree, long BoundariesType):
 
   cdef int err
+  cdef long Datasize
+  Datasize = Data.size
   err = C_SamplesToCoefficients1D(<double*>Data.data, <long> Datasize, <long> SplineDegree,
                                   <long> BoundariesType)
   return err
 
-def InterpolatedValue1D (nm.ndarray[nm.double_t,ndim=1] Bcoeff, long Datasize,
+def InterpolatedValue1D (nm.ndarray[nm.double_t,ndim=1] Bcoeff,
                          x, long SplineDegree, long BoundariesType):
 
+  cdef long Datasize
   cdef nm.ndarray[nm.double_t,ndim=1] xx, Result
+  Datasize = Bcoeff.size
   if isinstance(x,(int,float)): 
     y = C_InterpolatedValue1D(<double*>Bcoeff.data, <long> Datasize, <double> x,
                             <long> SplineDegree, <long> BoundariesType)
@@ -46,9 +50,12 @@ def InterpolatedValue1D (nm.ndarray[nm.double_t,ndim=1] Bcoeff, long Datasize,
                                <long> x.size, <long> SplineDegree, <long> BoundariesType)
     return Result
 
-def ScatterValue1D (value,x,nm.ndarray[nm.double_t,ndim=1] Bcoeff, long Datasize, 
+def ScatterValue1D (value,x,nm.ndarray[nm.double_t,ndim=1] Bcoeff, 
                     long SplineDegree, long BoundariesType):
+
+  cdef long Datasize
   cdef nm.ndarray[nm.double_t,ndim=1] xx, vv
+  Datasize = Bcoeff.size
   if isinstance(x,(int,float)):
     C_ScatterValue1D(<double> value, <double> x, <double*> Bcoeff.data, 
                      <long> Datasize, <long> SplineDegree, <long> BoundariesType)
@@ -58,6 +65,25 @@ def ScatterValue1D (value,x,nm.ndarray[nm.double_t,ndim=1] Bcoeff, long Datasize
     C_ArrayScatterValue1D(<double*>vv.data, <double*> xx.data, <long> xx.size, 
                           <double*> Bcoeff.data, <long> Datasize, <long> SplineDegree, <long> BoundariesType)
   return
+
+def CoefficientsToCoefficients1D (nm.ndarray[nm.double_t,ndim=1] Bcoeff, nm.ndarray[nm.double_t,ndim=1] Samples,
+                                  long SplineDegree, long BoundariesType):
+
+  cdef nm.ndarray[nm.double_t,ndim=1] SampleValues, CoeffResult
+  SampleValues=nm.zeros(Samples.size)
+  CoeffResult=nm.zeros(Bcoeff.size)
+
+  cdef long Bcoeff_size, Samples_size
+  Bcoeff_size = Bcoeff.size
+  Samples_size = Samples.size
+  C_ArrayInterpolatedValue1D(<double*>Bcoeff.data, <long>Bcoeff_size, <double*> Samples.data, <double*>SampleValues.data,
+                             <long>Samples_size, <long>SplineDegree, <long>BoundariesType)
+  C_ArrayScatterValue1D(<double*>SampleValues.data,<double*>Samples.data,<long>Samples_size,
+                        <double*>CoeffResult.data, <long>Bcoeff_size, <long> SplineDegree, <long> BoundariesType)
+
+  return CoeffResult
+  #####
+  
 
 def SamplesToCoefficients2D (nm.ndarray[nm.double_t,ndim=2] Data, long Width, long Height,
                              long SplineDegree, long BoundariesType):
@@ -92,6 +118,14 @@ def InterpolatedValue2D(nm.ndarray[nm.double_t,ndim=2] Bcoeff, long Width, long 
     return Result
 
 ## Simple resampling example
+def ShiftVector (nm.ndarray[nm.double_t,ndim=1] Vector, shift=0.5, SplDeg=2, BndType=0):
+
+  tmp = Vector.copy()
+  si = tmp.shape[0]
+  err = SamplesToCoefficients1D(tmp,si,SplDeg,BndType)
+  x = nm.arange(si)
+  result = InterpolatedValue1D(tmp,si,x+shift,SplDeg,BndType)
+  return(result)
 
 def ShiftImage (nm.ndarray[nm.double_t,ndim=2] Image, shift=(0.5,0.5), SplDeg=2, BndType=0):
 
