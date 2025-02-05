@@ -25,7 +25,9 @@ cdef extern from "interpol.h":
 
 def SamplesToCoefficients1D (nm.ndarray[nm.double_t,ndim=1] Data,
                              long SplineDegree, long BoundariesType):
-
+  '''
+  Takes data on a *regular* grid and computes B-spline coefficients
+  '''
   cdef int err
   cdef long Datasize
   Datasize = Data.size
@@ -35,6 +37,11 @@ def SamplesToCoefficients1D (nm.ndarray[nm.double_t,ndim=1] Data,
 
 def InterpolatedValue1D (nm.ndarray[nm.double_t,ndim=1] Bcoeff,
                          x, long SplineDegree, long BoundariesType):
+
+  '''
+  Takes B-spline coefficient array and scalar (or vector) coordinate(s) x, 
+  return value(s) at the coordinate(s) x
+  '''
 
   cdef long Datasize
   cdef nm.ndarray[nm.double_t,ndim=1] xx, Result
@@ -53,6 +60,11 @@ def InterpolatedValue1D (nm.ndarray[nm.double_t,ndim=1] Bcoeff,
 def ScatterValue1D (value,x,nm.ndarray[nm.double_t,ndim=1] Bcoeff, 
                     long SplineDegree, long BoundariesType):
 
+  '''
+  Adjoint (not inverse !) operation of InterpolatedValue1D. Scatters value(s) at coordinate(s) x
+  onto B-spline coefficients.
+  '''
+
   cdef long Datasize
   cdef nm.ndarray[nm.double_t,ndim=1] xx, vv
   Datasize = Bcoeff.size
@@ -69,6 +81,13 @@ def ScatterValue1D (value,x,nm.ndarray[nm.double_t,ndim=1] Bcoeff,
 def CoefficientsToCoefficients1D (nm.ndarray[nm.double_t,ndim=1] Bcoeff, nm.ndarray[nm.double_t,ndim=1] Samples,
                                   long SplineDegree, long BoundariesType):
 
+  '''
+  Applies in a sequence InterpolatedValue1D and ScatterValue1D. This will be useful for the inverse
+  problem of estimating B-spline coefficients from irregular samples and values.
+  Takes B-spline coefficients and Samples as input, returns B-spline coefficients.
+  Typically used with more samples than coefficients for the inverse problem to be well posed.
+  '''
+
   cdef nm.ndarray[nm.double_t,ndim=1] SampleValues, CoeffResult
   SampleValues=nm.zeros(Samples.size)
   CoeffResult=nm.zeros(Bcoeff.size)
@@ -84,6 +103,24 @@ def CoefficientsToCoefficients1D (nm.ndarray[nm.double_t,ndim=1] Bcoeff, nm.ndar
   return CoeffResult
   #####
   
+def EstimateCoefficients1D (Samples, Values, n_coeffs, SplineDegree, BoundariesType, epsilon=1e-6):
+
+  '''
+  Solves the inverse problem of estimating n_coeffs B-spline coefficients from irregularly spaced 
+  coordinates (Samples) and associated values (Values).
+  NB: Samples are supposed to be scaled so that they pertain to the [0, n_coeffs] interval
+  Returns array of B-spline coefficients.
+  '''
+  # Compute RHS (A^T.d)
+  Coeffs_rhs = nm.zeros(n_coeffs)
+  ScatterValue1D(Values,Samples,Coeffs_rhs,SplineDegree,BoundariesType)
+  # Define A^T.A
+  def Amul(coeffs):
+    return CoefficientsToCoefficients1D(coeffs,Samples,SplineDegree,BoundariesType)
+  # Solve (A^T.A)^{-1}.A^T.d
+  res = nm.zeros(n_coeffs)
+  res = cg_solve(Coeffs_rhs, Amul, res, epsilon=epsilon)
+  return(res)
 
 def SamplesToCoefficients2D (nm.ndarray[nm.double_t,ndim=2] Data, long Width, long Height,
                              long SplineDegree, long BoundariesType):
@@ -196,7 +233,7 @@ def cg_solve (b,Amul,x0,epsilon=1e-6,nstepmax=500,Mdiv=None):
     p = z + beta*p
     nn += 1
 
-  print 'CG did not converge in %d iterations '%nstepmax
+  print ('CG did not converge in %d iterations '%nstepmax)
   return
 
 def cg_crit(r,epsilon):
